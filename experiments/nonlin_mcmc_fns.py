@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 from jax._src.util import partial, safe_zip, safe_map, unzip2
@@ -30,24 +29,18 @@ def tree_split_keys(tree_keys, num_keys=2):
 def tree_bg_select(i, logG_y, aux_state, global_key):
     sel_idxs = jax.random.categorical(global_key, logG_y, 
                                       shape=logG_y.shape)
-    # print(sel_idxs)
-
+    
     y_aux_flat, aux_treedef, aux_subtrees = aux_state
     y_aux = map(jax.tree_util.tree_unflatten, aux_subtrees, y_aux_flat)
 
     select_fn = lambda idxs, y: y[idxs]
-    # select_fn = lambda idxs, y: y[0][idxs]
-    # select_fn = lambda idxs, yr: (yr[0][idxs], yr[1][idxs]) # for rms
-    # select_fn = lambda idxs, yr: (yr[0][idxs], yr[1][idxs]/(0.75**2)) # for rms
+
     ysel = map(partial(select_fn, sel_idxs), y_aux)
-    
     ysel_flat, ysel_subtree = unzip2(map(jax.tree_util.tree_flatten, ysel))
-
-    return SamplerState(ysel_flat, aux_treedef, aux_subtrees)
-    # return SamplerState(ysel_flat, aux_treedef, ysel_subtree)
-
-def tree_ar_select(i, log_alpha, state, aux_state, global_key):
     
+    return SamplerState(ysel_flat, aux_treedef, aux_subtrees)
+    
+def tree_ar_select(i, log_alpha, state, aux_state, global_key):
     U = jax.random.uniform(global_key, shape=log_alpha.shape)
     accept_idxs = jnp.log(U) < log_alpha
 
@@ -63,9 +56,8 @@ def tree_ar_select(i, log_alpha, state, aux_state, global_key):
         return x * (1.0 - mask) + y * mask
 
     ysel = map(partial(select_fn, accept_idxs), x, y_aux)
-    
     ysel_flat, ysel_subtree = unzip2(map(jax.tree_util.tree_flatten, ysel))
-
+    
     return SamplerState(ysel_flat, aux_treedef, aux_subtrees)
 
 

@@ -49,7 +49,6 @@ def net_fn(batch):
 def main():
     #hyperparameters
     lr = 5e-3
-    # lr = 1e-3
     reg = 1e-4
     num_samples = 100 # number of samples to approximate the posterior
     init_stddev = 5.0 # initial distribution for the samples will be N(0, 0.1)
