@@ -7,7 +7,7 @@ import jax
 import jax_bayes
 from jax_bayes.mcmc import mala_fns
 
-import sys, os, math, time
+import sys, os, math
 import numpy as np
 from tqdm import trange
 
@@ -54,6 +54,7 @@ def main():
     init_stddev = 5.0 # initial distribution for the samples will be N(0, 0.1)
     train_batch_size = 1_000
     eval_batch_size = 10_000
+    noise_scale = 0.1
 
     #instantiate the model --- same as regular case
     net = hk.transform(net_fn)
@@ -63,8 +64,12 @@ def main():
     seed = 0
     key = jax.random.PRNGKey(seed)
     sampler_init, sampler_propose, sampler_accept, sampler_update, sampler_get_params = \
-        sampler_fns(key, num_samples=num_samples, step_size=lr, init_stddev=init_stddev,
-        noise_scale=0.1)
+        sampler_fns(key,
+            num_samples=num_samples,
+            step_size=lr,
+            init_stddev=init_stddev,
+            noise_scale=noise_scale
+        )
 
     def loss(params, batch):
         logits = net.apply(params, jax.random.PRNGKey(0), batch)
@@ -149,23 +154,6 @@ def main():
             print(f"step = {step}"
                 f" | val acc = {val_acc:.3f}"
                 f" | test acc = {test_acc:.3f}")
-    
-    def posterior_predictive(params, batch):
-        pred_fn = lambda p:net.apply(p, None, batch) 
-        pred_fn = jax.vmap(pred_fn)
-
-        logit_samples = pred_fn(params) # n_samples x batch_size x n_classes
-        pred_samples = jnp.argmax(logit_samples, axis=-1) #n_samples x batch_size
-
-        n_classes = logit_samples.shape[-1]
-        batch_size = logit_samples.shape[1]
-        probs = np.zeros((batch_size, n_classes))
-        for c in range(n_classes):
-            idxs = pred_samples == c
-            probs[:,c] = idxs.sum(axis=0)
-
-        return probs / probs.sum(axis=1, keepdims=True)
-
 
     def do_analysis():
         test_data = next(test_batches)
@@ -175,17 +163,15 @@ def main():
         probs = jnp.mean(jax.nn.softmax(all_test_logits, axis=-1), axis=0)
         correct_preds_mask = jnp.argmax(probs, axis=-1) == test_data['label']
 
-        pp = probs
-        entropies = jax_bayes.utils.entropy(pp)
-
+        entropies = jax_bayes.utils.entropy(probs)
         correct_ent = entropies[correct_preds_mask]
         incorrect_ent = entropies[~correct_preds_mask]
 
         mean_correct_ent = jnp.mean(correct_ent)
         mean_incorrect_ent = jnp.mean(incorrect_ent)
 
-        plt.hist(correct_ent, alpha=0.3, label='correct', density=True)
-        plt.hist(incorrect_ent, alpha=0.3, label='incorrect', density=True)
+        plt.hist(np.array(correct_ent), alpha=0.3, label='correct', density=True)
+        plt.hist(np.array(incorrect_ent), alpha=0.3, label='incorrect', density=True)
         plt.axvline(x=mean_correct_ent, color='blue', label='mean correct')
         plt.axvline(x=mean_incorrect_ent, color='orange', label='mean incorrect')
         plt.legend()
@@ -195,7 +181,6 @@ def main():
         plt.show()
 
     do_analysis()
-    plt.show()
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 from functools import partial
-import sys, os, math, time
+import sys, os, math
 import numpy as np
 from tqdm import trange
 from matplotlib import pyplot as plt
@@ -7,7 +7,6 @@ from matplotlib import pyplot as plt
 import haiku as hk
 
 import jax.numpy as jnp
-from jax.experimental import optimizers
 import jax
 
 import jax_bayes
@@ -58,13 +57,6 @@ def log_proposal(lr, x, dx, y, dy):
     return - 0.5 * jnp.sum(jnp.square((y - x - lr * dx)) \
                                     / math.sqrt(2 *lr))
 
-def tree_log_proposal(lr, x_tree, dx_tree, y_tree, dy_tree):
-    res_tree = jax.tree_util.tree_multimap(
-        jax.vmap(partial(log_proposal, lr)), 
-        x_tree, dx_tree, y_tree, dy_tree
-    )
-    return sum(leaf for leaf in jax.tree_util.tree_leaves(res_tree))
-
 def main():
     #hyperparameters
     lr = 5e-3
@@ -76,8 +68,8 @@ def main():
     train_batch_size = 1_000
     eval_batch_size = 10_000
     jump_prob = lambda i: 0.05
-    # jump_prob = lambda i: 0.0
-    aux_inv_temp = 0.9 # this is ok
+    aux_inv_temp = 0.9
+    noise_scale = 0.1
     
     #instantiate the model --- same as regular case
     net = hk.transform(net_fn)
@@ -93,15 +85,21 @@ def main():
     # seed = 5
     key = jax.random.PRNGKey(seed)
     
-    tgt_sampler = tgt_sampler_fns(key, num_samples=num_samples, 
-                                #   step_size=lr, init_stddev=5.0)
-                                  step_size=lr, init_stddev=init_stddev,
-                                  noise_scale=0.1)
+    tgt_sampler = tgt_sampler_fns(
+        key, 
+        num_samples=num_samples, 
+        step_size=lr, 
+        init_stddev=init_stddev,
+        noise_scale=noise_scale
+    )
 
-    aux_sampler = aux_sampler_fns(key, num_samples=num_samples, 
-                                #   step_size=lr, init_stddev=5.0)
-                                  step_size=lr, init_stddev=init_stddev,
-                                  noise_scale=0.1)
+    aux_sampler = aux_sampler_fns(
+        key,
+        num_samples=num_samples,        
+        step_size=lr,
+        init_stddev=init_stddev,
+        noise_scale=noise_scale
+    )
 
     # loss is the same as the regular case! This is because in regular ML, we're minimizing
     # the negative log-posterior logP(params | data) = logP(data | params) + logP(params) + constant
@@ -132,7 +130,6 @@ def main():
     #build the mcmc step. This is like the opimization step, but for sampling
     def aux_sampler_step(i, state, keys, batch):
         params = aux_sampler.get_params(state)
-        # rvals = aux_sampler.get_params(state, idx=1)
 
         logp = lambda params: aux_logprob(params, batch)
         fx, dx = jax.vmap(jax.value_and_grad(logp))(params)
@@ -140,7 +137,6 @@ def main():
         prop_state, keys = aux_sampler.propose(i, dx, state, keys)
 
         prop_params = aux_sampler.get_params(prop_state)
-        # prop_rvals = aux_sampler.get_params(prop_state, idx=1)
         fx_prop, dx_prop = jax.vmap(jax.value_and_grad(logp))(prop_params)
 
         # generate the acceptance indices from the Metropolis-Hastings
@@ -148,11 +144,12 @@ def main():
         accept_idxs, keys = aux_sampler.accept(
             i, fx, fx_prop, dx, state, dx_prop, prop_state, keys
         )
+
+        # perform a short burn-in accepting every step
         accept_idxs = jax.lax.cond(
             i < 100,
             lambda idxs: jnp.ones_like(idxs),
             lambda idxs: idxs,
-            # lambda idxs: jnp.ones_like(idxs),
             accept_idxs
         )
         # update the sampler state based on the acceptance acceptance indices
@@ -164,7 +161,6 @@ def main():
 
     def tgt_sampler_step(i, state, keys, batch):
         params = tgt_sampler.get_params(state)
-        # rvals = tgt_sampler.get_params(state, idx=1)
 
         logp = lambda params: logprob(params, batch)
         fx, dx = jax.vmap(jax.value_and_grad(logp))(params)
@@ -172,12 +168,13 @@ def main():
         prop_state, keys = tgt_sampler.propose(i, dx, state, keys)
 
         prop_params = tgt_sampler.get_params(prop_state)
-        # prop_rvals = tgt_sampler.get_params(prop_state, idx=1)
         fx_prop, dx_prop = jax.vmap(jax.value_and_grad(logp))(prop_params)
 
         accept_idxs, keys = tgt_sampler.accept(
             i, fx, fx_prop, dx, state, dx_prop, prop_state, keys
         )
+
+        # perform a short burn-in accepting every step
         accept_idxs = jax.lax.cond(
             i < 100,
             lambda idxs: jnp.ones_like(idxs),
@@ -199,20 +196,17 @@ def main():
         logp = lambda params: logprob(params, batch)
         aux_logp = lambda params: aux_logprob(params, batch)
         log_G = lambda p: logp(p) - aux_logp(p)
-        log_alpha = lambda x, y: logp(y) - logp(x) + aux_logp(x) - aux_logp(y)
 
         params = tgt_sampler.get_params(state)
         fx = jax.vmap(logp)(params)
 
         y_aux = aux_sampler.get_params(aux_state)
         logG_aux = jax.vmap(log_G)(y_aux)
-        dy_aux = y_aux # dummy variable
         
         keys, global_keys = tree_split_keys(keys, num_keys=3)
         global_sel_key, global_jump_key = global_keys
         sel_state = tree_bg_select(i, logG_aux, aux_state, global_sel_key)
         
-
         U = jax.random.uniform(global_jump_key, fx.shape)
         jump_idxs = U < jump_prob(i)
         
@@ -245,24 +239,6 @@ def main():
                 f" | val acc = {val_acc:.3f}"
                 f" | test acc = {test_acc:.3f}")
 
-
-    def posterior_predictive(params, batch):
-        pred_fn = lambda p:net.apply(p, None, batch) 
-        pred_fn = jax.vmap(pred_fn)
-
-        logit_samples = pred_fn(params) # n_samples x batch_size x n_classes
-        pred_samples = jnp.argmax(logit_samples, axis=-1) #n_samples x batch_size
-
-        n_classes = logit_samples.shape[-1]
-        batch_size = logit_samples.shape[1]
-        probs = np.zeros((batch_size, n_classes))
-        for c in range(n_classes):
-            idxs = pred_samples == c
-            probs[:,c] = idxs.sum(axis=0)
-
-        return probs / probs.sum(axis=1, keepdims=True)
-
-
     def do_analysis():
         test_data = next(test_batches)
         pred_fn = jax.vmap(net.apply, in_axes=(0, None, None))
@@ -271,18 +247,15 @@ def main():
         probs = jnp.mean(jax.nn.softmax(all_test_logits, axis=-1), axis=0)
         correct_preds_mask = jnp.argmax(probs, axis=-1) == test_data['label']
 
-        # pp = posterior_predictive(params, test_data)
-        pp = probs
-        entropies = jax_bayes.utils.entropy(pp)
-
+        entropies = jax_bayes.utils.entropy(probs)
         correct_ent = entropies[correct_preds_mask]
         incorrect_ent = entropies[~correct_preds_mask]
 
         mean_correct_ent = jnp.mean(correct_ent)
         mean_incorrect_ent = jnp.mean(incorrect_ent)
 
-        plt.hist(correct_ent, alpha=0.3, label='correct', density=True)
-        plt.hist(incorrect_ent, alpha=0.3, label='incorrect', density=True)
+        plt.hist(np.array(correct_ent), alpha=0.3, label='correct', density=True)
+        plt.hist(np.array(incorrect_ent), alpha=0.3, label='incorrect', density=True)
         plt.axvline(x=mean_correct_ent, color='blue', label='mean correct')
         plt.axvline(x=mean_incorrect_ent, color='orange', label='mean incorrect')
         plt.legend()
@@ -290,7 +263,6 @@ def main():
         plt.ylabel("histogram density")
         plt.title("posterior predictive entropy of correct vs incorrect predictions")
         plt.show()
-
 
     do_analysis()
 
