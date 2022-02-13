@@ -9,11 +9,12 @@ import datetime as dt
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
-import seaborn as sns
 
 from tqdm import tqdm
 
 from jax_bayes.mcmc import mala_fns
+
+import sys; sys.path.append('..')
 from nonlin_mcmc_fns import (
     tree_split_keys,
     tree_bg_select,
@@ -58,7 +59,7 @@ def run(
 
     allsamps = []
 
-    #====== Tests =======
+    #====== Runs =======
     g = elementwise_value_and_grad(logprob)
     g_tgt = g
     g_aux = elementwise_value_and_grad(aux_logprob)
@@ -81,7 +82,6 @@ def run(
     aux_sampler_state, aux_sampler_keys = aux_sampler.init(aux_init_vals)
     aux_init_state = aux_sampler_state
 
-    # jump_prob = lambda i: 0.0
     jump_prob_fn = lambda i: jump_prob
 
     def _tgt_step(i, state, keys):
@@ -148,7 +148,6 @@ def run(
 
         jump_idxs = U < jump_prob_fn(i)
 
-        # state, keys = tgt_sampler.update(i, jump_idxs, state, sel_state, keys)
         state = tree_jump_update(jump_idxs, state, sel_state)
         return state, aux_state, keys
 
@@ -171,7 +170,7 @@ def run(
     ax.set_xticks([])
     ax.set_yticks([])
 
-def plot_targets(ax, tgt_logprob):
+def plot_target(ax, tgt_logprob):
     if tgt_logprob == 'moons':
         logprob = make_two_moons()
     elif tgt_logprob == 'mog':
@@ -196,16 +195,6 @@ def plot_targets(ax, tgt_logprob):
 
     ax.set_xticks([])
     ax.set_yticks([])
-    
-def test():
-    f, ax = plt.subplots()
-
-    lr = 1e-5
-    lr = 1e-3
-    run(ax, lr=lr, jump_prob=0.1, interaction_type='ar', 
-                n_samples=2_000, seed=0)
-
-    plt.show()
 
 def run_lr_sweep():
     seed = 0
@@ -239,7 +228,7 @@ def run_overview():
     f, axes = plt.subplots(3, 4, sharex=True, sharey=True)
     tgt_logprobs = ['moons', 'mog', 'rings']
     for j, tgt_logprob in enumerate(tgt_logprobs):
-        plot_targets(axes[j, 0], tgt_logprob=tgt_logprob) 
+        plot_target(axes[j, 0], tgt_logprob=tgt_logprob) 
 
     for j, tgt_logprob in enumerate(tgt_logprobs):
         ax = axes[j][1]
@@ -261,6 +250,6 @@ def run_overview():
 
 
 if __name__ == '__main__':
-    # test()
-    # run_lr_sweep()
     run_overview()
+    # run_lr_sweep()
+    # test()
