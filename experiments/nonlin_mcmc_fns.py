@@ -3,10 +3,8 @@ import jax
 import jax.numpy as jnp
 from jax._src.util import partial, safe_zip, safe_map, unzip2
 
-# from sampler_v2 import SamplerKeys, SamplerState
 import sys
-sys.path.append('../../../research_libraries/jax-bayes-dev/working-jax-bayes-v2')
-from jax_bayes_v2.mcmc import SamplerState, SamplerKeys
+from jax_bayes.mcmc import SamplerState, SamplerKeys
 
 from functools import partial
 

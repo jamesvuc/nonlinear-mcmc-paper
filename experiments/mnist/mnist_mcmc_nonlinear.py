@@ -13,6 +13,7 @@ import jax
 import jax_bayes
 from jax_bayes.mcmc import mala_fns
 
+sys.path.append('..')
 from nonlin_mcmc_fns import (
     tree_split_keys,
     tree_bg_select,
