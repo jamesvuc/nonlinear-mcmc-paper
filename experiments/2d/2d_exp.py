@@ -4,8 +4,6 @@ import jax
 import jax.numpy as jnp
 import jax.scipy.stats.multivariate_normal as mvn
 
-import itertools, math
-import datetime as dt
 import matplotlib
 from matplotlib import pyplot as plt
 import matplotlib.cm as cm
@@ -50,7 +48,6 @@ def run(
     else:
         raise ValueError(f"Got invalid tgt_logprob {tgt_logprob}!")
 
-    # aux_logprob = lambda z: 0.7 * logprob(z)
     aux_mean, aux_sigma = jnp.zeros(2), jnp.eye(2) * 4
     aux_logprob = jax.jit(lambda z: mvn.logpdf(z, mean=aux_mean, cov=aux_sigma))
     log_G = lambda z: logprob(z) - aux_logprob(z)
@@ -101,7 +98,6 @@ def run(
         )
         return state, keys
 
-    @jax.jit
     def _aux_step(i, state, keys):
         x = aux_sampler.get_params(state)
         fx, dx = g_aux(x)
@@ -120,7 +116,7 @@ def run(
         return state, keys
 
     @jax.jit
-    def _nonlin_step(i, state, aux_state, keys):
+    def nonlin_step(i, state, aux_state, keys):
         aux_state, keys = _aux_step(i, aux_state, keys)
         state, keys = _tgt_step(i, state, keys)
 
@@ -154,7 +150,7 @@ def run(
     num_iters = 5_000
     for i in tqdm(range(num_iters)):
         sampler_state, aux_sampler_state, sampler_keys = \
-            _nonlin_step(i, sampler_state, aux_sampler_state, sampler_keys)
+            nonlin_step(i, sampler_state, aux_sampler_state, sampler_keys)
 
     samples = tgt_sampler.get_params(sampler_state)
     aux_samples = aux_sampler.get_params(aux_sampler_state)
@@ -252,4 +248,3 @@ def run_overview():
 if __name__ == '__main__':
     run_overview()
     # run_lr_sweep()
-    # test()
