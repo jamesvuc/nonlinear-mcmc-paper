@@ -99,7 +99,6 @@ def main():
     def mcmc_step(i, state, keys, batch):
         #extract parameters
         params = sampler_get_params(state)
-        # rvals = sampler_get_params(state, idx=1)
         
         #form a partial eval of logprob on the data
         logp = lambda p: logprob(p,  batch) #can make this 1-line?
