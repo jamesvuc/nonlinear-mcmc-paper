@@ -20,7 +20,7 @@ If you use this work, please cite the paper
 @article{vuckovic2022long,
   title={Long-Time convergence and propoagation of chaos for nonlinear mcmc},
   author={Vuckovic, James},
-  journal={arXiv preprint arXiv:NEED},
+  journal={arXiv preprint arXiv:2202.05621},
   year={2022}
 }
 ```
