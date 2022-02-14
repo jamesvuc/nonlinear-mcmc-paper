@@ -1,5 +1,5 @@
 # Nonlinear MCMC
-This repo contains the code for the experiments in the paper ***Long-Time Convergence and Propoagation of Chaos for Nonlinear MCMC*** [`INSERT ARXIV ID`](arxiv link). 
+This repo contains the code for the experiments in the paper ***Long-Time Convergence and Propoagation of Chaos for Nonlinear MCMC*** [arXiv:2202.05621](https://arxiv.org/abs/2202.05621). 
 
 ## Overview
 In the paper, and in this repo, there are two main experiments: 
